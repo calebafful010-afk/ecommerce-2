@@ -1,0 +1,10 @@
+{
+  "type": "enum",
+  "name": "ShippingStatus",
+  "namespace": "ionutbalosin.training.ecommerce.message.schema.shipping",
+  "symbols": [
+    "IN_PROGRESS",
+    "COMPLETED",
+    "FAILED"
+  ]
+}

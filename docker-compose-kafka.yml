@@ -1,0 +1,85 @@
+version: '3.5'
+services:
+  # References:
+  # - Cookbook: https://github.com/robcowart/docker_compose_cookbook
+  # - Confluent Docker images: https://github.com/confluentinc/cp-docker-images @see /examples/kafka-single-node
+  # - Debezium connector for PostgreSQL: https://debezium.io/documentation/reference/stable/connectors/postgresql.html
+
+  #---------------------------#
+  # Confluent Kafka Zookeeper #
+  #---------------------------#
+  # - keeps track of which brokers are part of the Kafka cluster
+  # - used by Kafka brokers to determine which broker is the leader of a given partition and topic
+  # - stores configurations for topics and permissions
+  # - sends notifications to Kafka in case of changes (e.g. new topic, broker dies, broker comes up, delete topics, etc.…)
+  zookeeper:
+    container_name: zookeeper.local
+    image: confluentinc/cp-zookeeper:7.5.0
+    ports:
+      - 12181:12181
+    networks:
+      - ecommerce-network
+    environment:
+      - ZOOKEEPER_CLIENT_PORT=12181
+      - ZOOKEEPER_TICK_TIME=2000
+  #-----------------#
+  # Confluent Kafka #
+  #-----------------#
+  kafka:
+    container_name: kafka.local
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - zookeeper
+    ports:
+      - 29092:29092
+    networks:
+      - ecommerce-network
+    environment:
+      - KAFKA_BROKER_ID=1
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:12181
+      - KAFKA_ADVERTISED_HOST_NAME=kafka
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:19092,EXTERNAL://localhost:29092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=SSL:SSL,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+  #---------------------------#
+  # Confluent Schema Registry #
+  #---------------------------#
+  # - provides an interface for storing and retrieving Avro, JSON Schema, and Protobuf schemas across producers and consumers
+  # - stores a versioned history of all schemas based on a specified subject name strategy, provides multiple compatibility settings and allows evolution of schemas according to the configured compatibility settings and expanded support for these schema types
+  # How does it work with producers and consumers?
+  # - the producer, before sending the data to Kafka, talks to the schema registry first and checks if the schema is available. If it doesn’t find the schema then it registers and caches it in the schema registry
+  # - once the producer gets the schema, it will serialize the data with the schema and send it to Kafka in binary format prepended with a unique schema ID
+  # - when the consumer processes this message, it will communicate with the schema registry using the schema ID it got from the producer and deserialize it using the same schema
+  schema-registry:
+    container_name: schema-registry.local
+    image: confluentinc/cp-schema-registry:7.5.0
+    depends_on:
+      - zookeeper
+      - kafka
+    ports:
+      - 18081:8081
+    networks:
+      - ecommerce-network
+    environment:
+      - SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL=zookeeper:12181
+      - SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS=PLAINTEXT://kafka:19092
+      - SCHEMA_REGISTRY_HOST_NAME=schema-registry
+      - SCHEMA_REGISTRY_LISTENERS=http://0.0.0.0:18081
+      - SCHEMA_REGISTRY_AVRO_COMPATIBILITY_LEVEL=backward
+  #---------------------------#
+  # Obsidian Dynamics Kafdrop #
+  #---------------------------#
+  # - provides a Web UI for Kafka to monitor a cluster, view topics and consumer groups
+  kafdrop:
+    container_name: kafdrop.local
+    image: obsidiandynamics/kafdrop:3.31.0
+    networks:
+      - ecommerce-network
+    depends_on:
+      - kafka
+    ports:
+      - 19000:9000
+    environment:
+      KAFKA_BROKERCONNECT: kafka:19092
